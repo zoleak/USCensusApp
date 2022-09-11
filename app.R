@@ -1,6 +1,5 @@
 ### Shiny app to analyze US Census Data ###
 ### Author: Kevin Zolea ###
-### Date: 11/2018 ###
 ############################################################################
 #if (!require(pacman)) {
 ##install.packages('pacman')
@@ -13,6 +12,7 @@
 #"shiny","shinydashboard","DT","leaflet","rgdal","sf","rmapshaper",
 #"rsconnect","shinyjs","tidycensus")
 ############################################################################
+# Load libraries in
 library(ggplot2)
 library(tidyr)
 library(plyr)
@@ -40,9 +40,10 @@ library(leaflet.extras)
 ############################################################################
 readRenviron("~/.Renviron")
 ### Define Census API Key and set it with census_api_key() ###
-#Sys.getenv("CENSUS_API_KEY")
+Sys.getenv("CENSUS_API_KEY")
+Sys.getenv("api_key")
 #api_key<-"1c32b297e99b22d82fb12c683f56d95eb9e12168"
-#census_api_key(api_key,install = TRUE,overwrite = T)
+census_api_key(api_key,install = TRUE,overwrite = T)
 ### Make vector of variables of interest to pull from API ###
 variables_interest<-c('Population' ="B01003_001",'Median Income'="B19013_001",
                       'Median Home Value' = "B25077_001","Total Owner Occupied Housing by Tenure"= "B25003_002",
@@ -64,7 +65,9 @@ header<- dashboardHeader(title = "US Census Data Explorer",titleWidth = 350,
                              dropdownMenu(
                                type = "notifications",
                                notificationItem(text = "Information about US Census Bureau Data",
-                                                href = "https://www.census.gov/data.html")))
+                                                href = "https://www.census.gov/data.html"),
+                               notificationItem(text = "API used for App's Data",
+                                                href = "https://walker-data.com/tidycensus/")))
 ############################################################################ 
 ### Create Sidebar for app ###
 sidebar<-dashboardSidebar(
@@ -76,6 +79,8 @@ sidebar<-dashboardSidebar(
 ############################################################################ 
 ### Create body of app ###
 body<-dashboardBody(
+  tags$head(
+    tags$link(rel = "stylesheet", type = "text/css", href = "custom.css")),
             fluidRow(box(leafletOutput("census_map")%>%
                            withSpinner(type=5,color = "blue")),
             box(plotOutput("plot1")%>%
@@ -92,17 +97,27 @@ ui<- dashboardPage(
 # Define server logic required to draw a histogram
 server <- function(input, output,session) {
 ### Create a reactive data frame to get census data based on user input ###
-  df<-reactive({
-    get_acs(geography = "county",
-                       variables = input$variable,
-                       state = input$state,
-                       geometry = TRUE)
-
-  })
+  test<-reactive({
+        get_acs(geography = "county",
+          variables = input$variable,
+          state = input$state,
+          geometry = TRUE)})
   
-  #df2<-reactive({
-  #  df()%>%
-  #  dplyr::select(NAME,estimate,moe)})
+  df<-reactive({
+    test()%>%
+      arrange(desc(estimate)) %>%
+      slice(1:10) 
+      
+  })
+
+  df2<-reactive({
+    df()%>%
+      mutate(variable= recode(variable,B01003_001='Population',B19013_001='Median Income',
+                              B25077_001='Median Home Value',B25003_002="Total Owner Occupied Housing by Tenure",
+                              B25064_001="Median Gross Rent",B25105_001="Median Monthly Housing Costs",
+                              B01001_002="Total Male Population",B01001_026="Total Female Population"))})
+  
+  
 ### Create reactive dataframe to get colors for leaflet map ###
   pal<- reactive({
     colorNumeric(palette = "plasma", 
@@ -116,6 +131,25 @@ server <- function(input, output,session) {
   })
   
 ### Output for leaflet map ###  
+  
+  tag.map.title <- tags$style(HTML("
+  .leaflet-control.map-title { 
+    transform: translate(-50%,20%);
+    position: fixed !important;
+    left: 50%;
+    text-align: center;
+    padding-left: 10px; 
+    padding-right: 10px; 
+    background: rgba(255,255,255,0.75);
+    font-weight: bold;
+    font-size: 28px;
+  }
+"))
+  
+  title <- tags$div(
+    tag.map.title, HTML(paste("Top 10", "Counties", sep="<br/>"))
+  )  
+  
   output$census_map<- renderLeaflet({
         df()%>%
     leaflet(options = leafletOptions(minZoom = 7))%>%
@@ -130,8 +164,10 @@ server <- function(input, output,session) {
       addLegend("bottomright",
                 pal = pal(),
                 values = ~estimate,
-                title = "",
-                opacity = 1)
+                title = unique(df2()$variable),
+                opacity = 1)%>%
+      addControl(title, position = "topleft", className="map-title")
+    
 
 })
   
@@ -142,22 +178,23 @@ server <- function(input, output,session) {
       return()
     else
       leafletProxy("census_map")%>%
-      setView(lng = click$lng , lat = click$lat, zoom=10)
+      setView(lng = click$lng , lat = click$lat, zoom=12)
   })
   
  ### Output for plot ###
-
-
   output$plot1<- renderPlot({
     if(input$variable == "B01003_001"|input$variable == "B01001_002"|input$variable == "B01001_026"){
-    df()%>%
-      ggplot(aes(x = NAME, y =estimate)) +
-      geom_bar(stat= "identity",fill = "#0c439b") +
-      labs(title = paste("Household population by county in ",input$state),
-           subtitle = "2013-2017 American Community Survey",
-           y = "",
-           x = "County")+
-        theme(axis.text.x = element_text(angle = 90, vjust = 0.5,margin = margin(c(0, 20, 0, 0))))
+      
+
+      df()%>%
+        ggplot(aes(x = NAME, y =estimate)) +
+        geom_bar(stat= "identity",fill = "#0c439b") +
+        #scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
+        labs(title = paste0("Top 10 Counties for ", df2()$variable , " in ", input$state),
+             subtitle = "2016-2020 American Community Survey",
+             y = "",
+             x = "County")+
+        theme(axis.text.x = element_text(angle = 90))
       
     }
     
@@ -167,7 +204,9 @@ server <- function(input, output,session) {
         ggplot(aes(x = estimate, y = reorder(NAME, estimate))) +
         geom_errorbarh(aes(xmin = estimate - moe, xmax = estimate + moe)) +
         geom_point(color = "red", size = 3)+
-        labs(title = "2013-2017 American Community Survey",
+        scale_x_continuous(labels=scales::dollar_format())+
+        labs(title = paste0("Top 10 Counties for ", df2()$variable , " in ", input$state),
+             subtitle = "2016-2020 American Community Survey",
              y = "",
              x = "ACS estimate (bars represent margin of error)")
 
@@ -181,12 +220,5 @@ server <- function(input, output,session) {
 
 # Run the application 
 shinyApp(ui,server)
-
-#rsconnect::setAccountInfo(name='kzolea695',
- #token='DC7A93A56CEAB9776CFADE6C8F5E1367',
- #secret='9DSUwsPxNtDEDx2BrHXG8lZ6MPZ6OukS8LM/UQeX')
-
-
-#deployApp()
 
 
