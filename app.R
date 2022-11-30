@@ -38,12 +38,9 @@ library(tidycensus)
 library(stringr)
 library(leaflet.extras)
 ############################################################################
-readRenviron("~/.Renviron")
-### Define Census API Key and set it with census_api_key() ###
-Sys.getenv("CENSUS_API_KEY")
-Sys.getenv("api_key")
-#api_key<-"1c32b297e99b22d82fb12c683f56d95eb9e12168"
-census_api_key(api_key,install = TRUE,overwrite = T)
+# Read API key into app without user having to obtain their own
+readRenviron(".Renviron")
+print(Sys.getenv("CENSUS_API_KEY"))
 ### Make vector of variables of interest to pull from API ###
 variables_interest<-c('Population' ="B01003_001",'Median Income'="B19013_001",
                       'Median Home Value' = "B25077_001","Total Owner Occupied Housing by Tenure"= "B25003_002",
@@ -171,7 +168,7 @@ server <- function(input, output,session) {
 
 })
   
-  ### Allows user to have map zoomed in when impaired HUC is clicked ###
+  ### Allows user to have map zoomed in ###
   observe({
     click <- input$census_map_shape_click
     if(is.null(click))
@@ -187,15 +184,23 @@ server <- function(input, output,session) {
       
 
       df()%>%
-        ggplot(aes(x = NAME, y =estimate)) +
+        ggplot(aes(x = reorder(NAME,+estimate), y =estimate)) +
         geom_bar(stat= "identity",fill = "#0c439b") +
+        #geom_text(
+         # aes(label = estimate),color="white",
+         # size = 4, fontface = "bold", family = "Fira Sans",
+          #colour = "white", size = 3.2,
+         # position = position_stack(vjust = 0.7))+
+        coord_flip()+
+        scale_y_continuous(labels = scales::comma)+
         #scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
         labs(title = paste0("Top 10 Counties for ", df2()$variable , " in ", input$state),
              subtitle = "2016-2020 American Community Survey",
              y = "",
              x = "County")+
-        theme(axis.text.x = element_text(angle = 90))
-      
+        theme_void() +
+        theme(title = element_text(size = 12, hjust = 1, family = "Fira Sans",face = "bold"),
+              axis.text = element_text(size = 11.5, hjust = 1, family = "Fira Sans"))
     }
     
     else{
