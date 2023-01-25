@@ -6,8 +6,7 @@
 Every year the US Census Bureau collects data on America's people, places and economy. This data is critical in depicting an accurate portrait of America. This project utilizes the [tidycensus](https://walker-data.com/tidycensus/index.html) package to import data from the US Census Bureau’s API. 
 The data is then visualized inside an R shiny application.
 
-## How to Install
+## How to access the application?
 
 The US Census Data Explorer App
-can be installed by cloning this repository into Rstudio. 
-In the future, I'd like to have it deployed to shinyapps.io.
+can be accessed by going to the following [website](https://kzolea695.shinyapps.io/USCensusApp/)
